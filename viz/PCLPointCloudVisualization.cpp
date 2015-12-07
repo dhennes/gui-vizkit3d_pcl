@@ -18,7 +18,8 @@ struct PCLPointCloudVisualization::Data {
 
 
 PCLPointCloudVisualization::PCLPointCloudVisualization()
-    : p(new Data), default_feature_color(osg::Vec4f(1.0f, 1.0f, 1.0f, 1.0f)), new_points(false)
+  : p(new Data), default_feature_color(osg::Vec4f(1.0f, 1.0f, 1.0f, 1.0f)), new_points(false),
+    colorByZAxis(false), minZ(999.0f), maxZ(-999.0f)
 {
 }
 
@@ -58,7 +59,24 @@ void PCLPointCloudVisualization::updateMainNode ( osg::Node* node )
         pointsOSG->clear();
         color->clear();
 
-        if(pcl::getFieldIndex(p->data, "rgba") != -1)
+        if (colorByZAxis)
+        {
+            pcl::PointCloud<pcl::PointXYZ> pc;
+            pcl::fromPCLPointCloud2(p->data, pc);
+
+            for(size_t i = 0; i < pc.size(); i++)
+            {
+                pointsOSG->push_back(osg::Vec3f(pc[i].x, pc[i].y, pc[i].z));
+                float val = pc[i].z;
+                minZ = std::min(minZ, val);
+                maxZ = std::max(maxZ, val);
+                val = (val - minZ) / (maxZ - minZ);
+                QColor c;
+                c.setHsvF(val * 0.8f, 1.0f, 1.0f);
+                color->push_back(osg::Vec4f(c.redF(), c.greenF(), c.blueF(), c.alphaF()));
+            }
+        }
+        else if(pcl::getFieldIndex(p->data, "rgba") != -1)
         {
             pcl::PointCloud<pcl::PointXYZRGBA> pc;
             pcl::fromPCLPointCloud2(p->data, pc);
@@ -78,6 +96,20 @@ void PCLPointCloudVisualization::updateMainNode ( osg::Node* node )
             {
                 pointsOSG->push_back(osg::Vec3f(pc[i].x, pc[i].y, pc[i].z));
                 color->push_back(osg::Vec4f(pc[i].r/255.0, pc[i].g/255.0, pc[i].b/255.0, 1.0));
+            }
+        }
+        else if(pcl::getFieldIndex(p->data, "intensity") != -1)
+        {
+            pcl::PointCloud<pcl::PointXYZI> pc;
+            pcl::fromPCLPointCloud2(p->data, pc);
+
+            for(size_t i = 0; i < pc.size(); i++)
+            {
+                pointsOSG->push_back(osg::Vec3f(pc[i].x, pc[i].y, pc[i].z));
+                float intensity = pc[i].intensity;
+                intensity = std::min(intensity, 1.0f);
+                intensity = std::max(intensity, 0.0f);
+                color->push_back(osg::Vec4f(intensity, intensity, intensity, 1.0));
             }
         }
         else
@@ -144,6 +176,21 @@ void PCLPointCloudVisualization::setPointSize(double size)
     emit propertyChanged("pointSize");
 }
 
+bool PCLPointCloudVisualization::getColorByZAxis()
+{
+    return colorByZAxis;
+}
+
+void PCLPointCloudVisualization::setColorByZAxis(bool flag)
+{
+    colorByZAxis = flag;
+    if (!flag)
+    {
+        minZ = 999.0f;
+        maxZ = -999.0f;
+    }
+    emit propertyChanged("colorByZAxis");
+}
 
 //Macro that makes this plugin loadable in ruby, this is optional.
 VizkitQtPlugin(PCLPointCloudVisualization)
